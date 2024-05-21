@@ -79,4 +79,4 @@ class BinarizeLinear(nn.Linear):
             self.bias.org = self.bias.data.clone()
             out += self.bias.view(1, -1).expand_as(out)
 
-        return out
+        return out 

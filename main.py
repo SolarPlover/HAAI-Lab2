@@ -1,7 +1,5 @@
-import argparse
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.autograd import Variable
@@ -9,47 +7,35 @@ from binarized_modules import BinarizeLinear
 from torch.utils.data import DataLoader
 
 # Training settings
-parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
-parser.add_argument('--batch-size', type=int, default=64, metavar='N',
-                    help='input batch size for training (default: 256)')
-parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
-                    help='input batch size for testing (default: 1000)')
-parser.add_argument('--epochs', type=int, default=100, metavar='N',
-                    help='number of epochs to train (default: 10)')
-parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
-                    help='learning rate (default: 0.001)')
-parser.add_argument('--momentum', type=float, default=0.5, metavar='M',
-                    help='SGD momentum (default: 0.5)')
-parser.add_argument('--no-cuda', action='store_true', default=False,
-                    help='disables CUDA training')
-parser.add_argument('--seed', type=int, default=1, metavar='S',
-                    help='random seed (default: 1)')
-parser.add_argument('--gpus', default=3,
-                    help='gpus used for training - e.g 0,1,3')
-parser.add_argument('--log-interval', type=int, default=10, metavar='N',
-                    help='how many batches to wait before logging training status')
-args = parser.parse_args()
-args.cuda = not args.no_cuda and torch.cuda.is_available()
-
-torch.manual_seed(args.seed)
-if args.cuda:
-    torch.cuda.manual_seed(args.seed)
+use_cuda = torch.cuda.is_available()
+batch_size=512                 # input batch size for training (default: 64)
+test_batch_size=2000	       # input batch size for testing (default: 1000)
+epochs=100
+lr=0.01
+seed=1                         # random seed (default: 1)
+log_interval=30000 			   # how many batches to wait before logging training status
 
 
-kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
+
+torch.manual_seed(seed)
+if use_cuda:
+    torch.cuda.manual_seed(seed)
+
+
+kwargs = {'num_workers': 4, 'pin_memory': True} if use_cuda else {}
 train_loader = DataLoader(
-    datasets.MNIST('../data', train=True, download=True,
+    datasets.MNIST('./data', train=True, download=True,
                    transform=transforms.Compose([
                        transforms.ToTensor(),
                        transforms.Normalize((0.1307,), (0.3081,))
                    ])),
-    batch_size=args.batch_size, shuffle=True, **kwargs)
+    batch_size=batch_size, shuffle=True, **kwargs)
 test_loader = DataLoader(
-    datasets.MNIST('../data', train=False, transform=transforms.Compose([
+    datasets.MNIST('./data', train=False, transform=transforms.Compose([
                        transforms.ToTensor(),
                        transforms.Normalize((0.1307,), (0.3081,))
                    ])),
-    batch_size=args.test_batch_size, shuffle=True, **kwargs)
+    batch_size=test_batch_size, shuffle=True, **kwargs)
 
 
 class Net(nn.Module):
@@ -66,7 +52,7 @@ class Net(nn.Module):
         self.htanh3 = nn.Hardtanh()
         self.bn3 = nn.BatchNorm1d(2048*self.infl_ratio)
         self.fc4 = nn.Linear(2048*self.infl_ratio, 10)
-        self.logsoftmax = nn.LogSoftmax()
+        # self.logsoftmax = nn.LogSoftmax()
         self.drop = nn.Dropout(0.5)
 
     def forward(self, x):
@@ -82,32 +68,32 @@ class Net(nn.Module):
         x = self.bn3(x)
         x = self.htanh3(x)
         x = self.fc4(x)
-        return self.logsoftmax(x)
+        # return self.logsoftmax(x)
+        return x
 
 
 model = Net()
-if args.cuda:
-    torch.cuda.set_device(3)
+if use_cuda:
+    torch.cuda.set_device(0)
     model.cuda()
 
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=args.lr)
+optimizer = optim.Adam(model.parameters(), lr=lr)
 
 
 def train(epoch):
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
         correct = 0
-        if args.cuda:
+        if use_cuda:
             data, target = data.cuda(), target.cuda()
-        # data, target = Variable(data), Variable(target)
         optimizer.zero_grad()
         output = model(data)
         loss = criterion(output, target)
 
-        if epoch % 40 == 0:
-            optimizer.param_groups[0]['lr'] = optimizer.param_groups[0]['lr']*0.1
+        # if epoch % 40 == 0:
+        #     optimizer.param_groups[0]['lr'] = optimizer.param_groups[0]['lr']*0.1
 
         optimizer.zero_grad()
         loss.backward()
@@ -119,7 +105,7 @@ def train(epoch):
             if hasattr(p, 'org'):
                 p.org.copy_(p.data.clamp_(-1, 1))
 
-        if batch_idx % args.log_interval == 0:
+        if batch_idx % log_interval == 0:
             #  Print Accuracy
             pred = output.data.max(1, keepdim=True)[1]
             correct += pred.eq(target.data.view_as(pred)).cpu().sum()
@@ -133,13 +119,13 @@ def train(epoch):
                 100. * batch_idx / len(train_loader), loss.item()))
 
 
-def test():
+def test(patience, best_loss):
     model.eval()
     test_loss = 0
     correct = 0
     with torch.no_grad():
         for data, target in test_loader:
-            if args.cuda:
+            if use_cuda:
                 data, target = data.cuda(), target.cuda()
             data, target = Variable(data), Variable(target)
             output = model(data)
@@ -151,11 +137,33 @@ def test():
     print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
         test_loss, correct, len(test_loader.dataset),
         100. * correct / len(test_loader.dataset)))
+    if test_loss < best_loss:
+        best_loss = test_loss
+        patience = 5
+    else:
+        patience -= 1
+    if patience == 0:
+		# dump the model
+        torch.save(model.state_dict(), 'model.pth')
+        print(model)
+		# dump the optimizer
+        torch.save(optimizer.state_dict(), 'optimizer.pth')
+		
+    return patience, best_loss
+
+
+     
 
 
 if __name__ == '__main__':
-    for epoch in range(1, args.epochs + 1):
+    patience = 5
+    best_loss = 1000000
+    for epoch in range(1, epochs + 1):
         train(epoch)
-        test()
-        if epoch % 40 == 0:
-            optimizer.param_groups[0]['lr'] = optimizer.param_groups[0]['lr']*0.1
+        patience, best_loss=test(patience, best_loss)
+        
+        # if epoch % 40 == 0:
+        #     optimizer.param_groups[0]['lr'] = optimizer.param_groups[0]['lr']*0.1
+        if patience == 0:
+            print('Early stopping...')
+            break
