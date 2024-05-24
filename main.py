@@ -120,6 +120,22 @@ def train(epoch):
 
 
 def test(patience, best_loss):
+
+    # state_dict = model.state_dict()
+    # for key in state_dict:
+	# 	# Get the parameter tensor
+    #     param = state_dict[key]
+    #     # print(param)
+		
+	# 	# Apply the threshold to convert values to 0 or 1
+    #     param = torch.where(param >= 0, torch.tensor(1.0).cuda(), torch.tensor(-1.0).cuda()).cuda()
+		
+	# 	# Update the state_dict with the new binary values
+    #     state_dict[key] = param
+
+	# # Load the modified state_dict back into the model
+    # model.load_state_dict(state_dict)
+    
     model.eval()
     test_loss = 0
     correct = 0
@@ -140,20 +156,20 @@ def test(patience, best_loss):
     if test_loss < best_loss:
         best_loss = test_loss
         patience = 5
-    else:
-        patience -= 1
-    if patience == 0:
-		# dump the model
+        # dump the model
         torch.save(model.state_dict(), 'model.pth')
         print(model)
+        # print the model's parameters (state_dict)
+
+        print("Model's state_dict:")
+        for param_tensor in model.state_dict():
+            print(param_tensor, "\t", model.state_dict()[param_tensor])
 		# dump the optimizer
-        torch.save(optimizer.state_dict(), 'optimizer.pth')
+        # torch.save(optimizer.state_dict(), 'optimizer.pth')
+    else:
+        patience -= 1
 		
     return patience, best_loss
-
-
-     
-
 
 if __name__ == '__main__':
     patience = 5

@@ -32,34 +32,34 @@ class Binarize(InplaceFunction):
         return grad_input, None, None, None
 
 
-class Quantize(InplaceFunction):
-    def forward(ctx, input, quant_mode='det', numBits=4, inplace=False):
-        ctx.inplace = inplace
-        if ctx.inplace:
-            ctx.mark_dirty(input)
-            output = input
-        else:
-            output = input.clone()
-        scale = (2 ** numBits - 1) / (output.max() - output.min())
-        output = output.mul(scale).clamp(-2 ** (numBits - 1) + 1, 2 ** (numBits - 1))
-        if quant_mode == 'det':
-            output = output.round().div(scale)
-        else:
-            output = output.round().add(torch.rand(output.size()).add(-0.5)).div(scale)
-        return output
+# class Quantize(InplaceFunction):
+#     def forward(ctx, input, quant_mode='det', numBits=4, inplace=False):
+#         ctx.inplace = inplace
+#         if ctx.inplace:
+#             ctx.mark_dirty(input)
+#             output = input
+#         else:
+#             output = input.clone()
+#         scale = (2 ** numBits - 1) / (output.max() - output.min())
+#         output = output.mul(scale).clamp(-2 ** (numBits - 1) + 1, 2 ** (numBits - 1))
+#         if quant_mode == 'det':
+#             output = output.round().div(scale)
+#         else:
+#             output = output.round().add(torch.rand(output.size()).add(-0.5)).div(scale)
+#         return output
 
-    def backward(grad_output):
-        # STE
-        grad_input = grad_output
-        return grad_input, None, None
+#     def backward(grad_output):
+#         # STE
+#         grad_input = grad_output
+#         return grad_input, None, None
 
 
 def binarized(input, quant_mode='det'):
     return Binarize.apply(input, quant_mode)
 
 
-def quantize(input, quant_mode, numBits):
-    return Quantize.apply(input, quant_mode, numBits)
+# def quantize(input, quant_mode, numBits):
+#     return Quantize.apply(input, quant_mode, numBits)
 
 
 class BinarizeLinear(nn.Linear):
