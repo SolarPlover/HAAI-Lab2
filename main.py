@@ -44,13 +44,13 @@ class Net(nn.Module):
         self.infl_ratio = 3
         self.fc1 = BinarizeLinear(784, 2048*self.infl_ratio)
         self.htanh1 = nn.Hardtanh()
-        self.bn1 = nn.BatchNorm1d(2048*self.infl_ratio)
+        self.bn1 = nn.BatchNorm1d(2048*self.infl_ratio, affine=False)
         self.fc2 = BinarizeLinear(2048*self.infl_ratio, 2048*self.infl_ratio)
         self.htanh2 = nn.Hardtanh()
-        self.bn2 = nn.BatchNorm1d(2048*self.infl_ratio)
+        self.bn2 = nn.BatchNorm1d(2048*self.infl_ratio, affine=False)
         self.fc3 = BinarizeLinear(2048*self.infl_ratio, 2048*self.infl_ratio)
         self.htanh3 = nn.Hardtanh()
-        self.bn3 = nn.BatchNorm1d(2048*self.infl_ratio)
+        self.bn3 = nn.BatchNorm1d(2048*self.infl_ratio, affine=False)
         self.fc4 = nn.Linear(2048*self.infl_ratio, 10)
         # self.logsoftmax = nn.LogSoftmax()
         self.drop = nn.Dropout(0.5)
@@ -120,21 +120,32 @@ def train(epoch):
 
 
 def test(patience, best_loss):
+	# !    FC bias=0   FC weights=1 or -1   No BatchNorm bias   No BatchNorm weights
+    state_dict = model.state_dict()
+    for key in state_dict:
+        if key == 'fc1.weight' or key == 'fc2.weight' or key == 'fc3.weight' or key == 'fc4.weight' :
+			# Get the parameter tensor
+            param = state_dict[key]
+			# print(param)
+			
+			# Apply the threshold to convert values to 0 or 1
+            param = torch.where(param >= 0.0, torch.tensor(1.0).cuda(), torch.tensor(-1.0).cuda()).cuda()
+			
+			# Update the state_dict with the new binary values
+            state_dict[key] = param
+        if key == 'fc1.bias' or key == 'fc2.bias' or key == 'fc3.bias' or key == 'fc4.bias' :
+            param = state_dict[key]
+            param = torch.where(param >= 0.0, torch.tensor(0.0).cuda(), torch.tensor(0.0).cuda()).cuda()
+            state_dict[key] = param
+            
+        if key == 'bn1.bias' or key == 'bn2.bias' or key == 'bn3.bias':
+            param = state_dict[key]
+            param = torch.where(param >= 0.0, torch.tensor(0.0).cuda(), torch.tensor(0.0).cuda()).cuda()
+            state_dict[key] = param
+            
 
-    # state_dict = model.state_dict()
-    # for key in state_dict:
-	# 	# Get the parameter tensor
-    #     param = state_dict[key]
-    #     # print(param)
-		
-	# 	# Apply the threshold to convert values to 0 or 1
-    #     param = torch.where(param >= 0, torch.tensor(1.0).cuda(), torch.tensor(-1.0).cuda()).cuda()
-		
-	# 	# Update the state_dict with the new binary values
-    #     state_dict[key] = param
-
-	# # Load the modified state_dict back into the model
-    # model.load_state_dict(state_dict)
+	# Load the modified state_dict back into the model
+    model.load_state_dict(state_dict)
     
     model.eval()
     test_loss = 0
