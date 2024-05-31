@@ -5,6 +5,8 @@ from torchvision import datasets, transforms
 from torch.autograd import Variable
 from binarized_modules import BinarizeLinear
 from torch.utils.data import DataLoader
+import numpy as np
+import os
 
 # Training settings
 use_cuda = torch.cuda.is_available()
@@ -41,19 +43,18 @@ test_loader = DataLoader(
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.infl_ratio = 3
-        self.fc1 = BinarizeLinear(784, 2048*self.infl_ratio)
+        self.infl_ratio = 1
+        self.fc1 = BinarizeLinear(784, 64*self.infl_ratio)
         self.htanh1 = nn.Hardtanh()
-        self.bn1 = nn.BatchNorm1d(2048*self.infl_ratio, affine=False)
-        self.fc2 = BinarizeLinear(2048*self.infl_ratio, 2048*self.infl_ratio)
+        self.bn1 = nn.BatchNorm1d(64*self.infl_ratio, affine=False)
+        self.fc2 = BinarizeLinear(64*self.infl_ratio, 64*self.infl_ratio)
         self.htanh2 = nn.Hardtanh()
-        self.bn2 = nn.BatchNorm1d(2048*self.infl_ratio, affine=False)
-        self.fc3 = BinarizeLinear(2048*self.infl_ratio, 2048*self.infl_ratio)
-        self.htanh3 = nn.Hardtanh()
-        self.bn3 = nn.BatchNorm1d(2048*self.infl_ratio, affine=False)
-        self.fc4 = nn.Linear(2048*self.infl_ratio, 10)
-        # self.logsoftmax = nn.LogSoftmax()
-        self.drop = nn.Dropout(0.5)
+        self.bn2 = nn.BatchNorm1d(64*self.infl_ratio, affine=False)
+        # self.fc3 = BinarizeLinear(64*self.infl_ratio, 64*self.infl_ratio)
+        # self.htanh3 = nn.Hardtanh()
+        # self.bn3 = nn.BatchNorm1d(64*self.infl_ratio, affine=False)
+        self.fc4 = nn.Linear(64*self.infl_ratio, 10)
+        self.drop = nn.Dropout(0.4)
 
     def forward(self, x):
         x = x.view(-1, 28*28)
@@ -63,12 +64,11 @@ class Net(nn.Module):
         x = self.fc2(x)
         x = self.bn2(x)
         x = self.htanh2(x)
-        x = self.fc3(x)
-        x = self.drop(x)
-        x = self.bn3(x)
-        x = self.htanh3(x)
+        # x = self.fc3(x)
+        # x = self.drop(x)
+        # x = self.bn3(x)
+        # x = self.htanh3(x)
         x = self.fc4(x)
-        # return self.logsoftmax(x)
         return x
 
 
@@ -167,16 +167,23 @@ def test(patience, best_loss):
     if test_loss < best_loss:
         best_loss = test_loss
         patience = 5
-        # dump the model
-        torch.save(model.state_dict(), 'model.pth')
         print(model)
-        # print the model's parameters (state_dict)
-
+        # print & save the model's parameters (state_dict)
+        # check if model.txt exists, if exists, delete it
+        if os.path.exists("model.txt"):
+            os.remove("model.txt")
+        # create a txt file and write the model's parameters (state_dict) to it
+        f = open("model.txt", "a")       
         print("Model's state_dict:")
         for param_tensor in model.state_dict():
             print(param_tensor, "\t", model.state_dict()[param_tensor])
-		# dump the optimizer
-        # torch.save(optimizer.state_dict(), 'optimizer.pth')
+            # write the model's parameters (state_dict) to the txt file
+            if param_tensor == 'fc1.weight' or param_tensor == 'fc2.weight' or param_tensor == 'fc4.weight' :
+                f.write(str(param_tensor) + "\n")
+                tensor_numpy = model.state_dict()[param_tensor].cpu().numpy()
+                np.savetxt(f, tensor_numpy, fmt='%s')
+                f.write("\n")
+        f.close()
     else:
         patience -= 1
 		
