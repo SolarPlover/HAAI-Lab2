@@ -44,16 +44,16 @@ class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
         self.infl_ratio = 1
-        self.fc1 = BinarizeLinear(784, 64*self.infl_ratio)
+        self.fc1 = BinarizeLinear(784, 32*self.infl_ratio)
         self.htanh1 = nn.Hardtanh()
-        self.bn1 = nn.BatchNorm1d(64*self.infl_ratio, affine=False)
-        self.fc2 = BinarizeLinear(64*self.infl_ratio, 64*self.infl_ratio)
+        self.bn1 = nn.BatchNorm1d(32*self.infl_ratio, affine=False)
+        self.fc2 = BinarizeLinear(32*self.infl_ratio, 32*self.infl_ratio)
         self.htanh2 = nn.Hardtanh()
-        self.bn2 = nn.BatchNorm1d(64*self.infl_ratio, affine=False)
+        self.bn2 = nn.BatchNorm1d(32*self.infl_ratio, affine=False)
         # self.fc3 = BinarizeLinear(64*self.infl_ratio, 64*self.infl_ratio)
         # self.htanh3 = nn.Hardtanh()
         # self.bn3 = nn.BatchNorm1d(64*self.infl_ratio, affine=False)
-        self.fc4 = nn.Linear(64*self.infl_ratio, 10)
+        self.fc3 = nn.Linear(32*self.infl_ratio, 10)
         self.drop = nn.Dropout(0.4)
 
     def forward(self, x):
@@ -68,7 +68,7 @@ class Net(nn.Module):
         # x = self.drop(x)
         # x = self.bn3(x)
         # x = self.htanh3(x)
-        x = self.fc4(x)
+        x = self.fc3(x)
         return x
 
 
@@ -91,9 +91,6 @@ def train(epoch):
         optimizer.zero_grad()
         output = model(data)
         loss = criterion(output, target)
-
-        # if epoch % 40 == 0:
-        #     optimizer.param_groups[0]['lr'] = optimizer.param_groups[0]['lr']*0.1
 
         optimizer.zero_grad()
         loss.backward()
@@ -123,17 +120,16 @@ def test(patience, best_loss):
 	# !    FC bias=0   FC weights=1 or -1   No BatchNorm bias   No BatchNorm weights
     state_dict = model.state_dict()
     for key in state_dict:
-        if key == 'fc1.weight' or key == 'fc2.weight' or key == 'fc3.weight' or key == 'fc4.weight' :
+        if key == 'fc1.weight' or key == 'fc2.weight' or key == 'fc3.weight' or key == 'fc3.weight' :
 			# Get the parameter tensor
             param = state_dict[key]
-			# print(param)
 			
 			# Apply the threshold to convert values to 0 or 1
             param = torch.where(param >= 0.0, torch.tensor(1.0).cuda(), torch.tensor(-1.0).cuda()).cuda()
 			
 			# Update the state_dict with the new binary values
             state_dict[key] = param
-        if key == 'fc1.bias' or key == 'fc2.bias' or key == 'fc3.bias' or key == 'fc4.bias' :
+        if key == 'fc1.bias' or key == 'fc2.bias' or key == 'fc3.bias' or key == 'fc3.bias' :
             param = state_dict[key]
             param = torch.where(param >= 0.0, torch.tensor(0.0).cuda(), torch.tensor(0.0).cuda()).cuda()
             state_dict[key] = param
@@ -178,7 +174,7 @@ def test(patience, best_loss):
         for param_tensor in model.state_dict():
             print(param_tensor, "\t", model.state_dict()[param_tensor])
             # write the model's parameters (state_dict) to the txt file
-            if param_tensor == 'fc1.weight' or param_tensor == 'fc2.weight' or param_tensor == 'fc4.weight' :
+            if param_tensor == 'fc1.weight' or param_tensor == 'fc2.weight' or param_tensor == 'fc3.weight' :
                 f.write(str(param_tensor) + "\n")
                 tensor_numpy = model.state_dict()[param_tensor].cpu().numpy()
                 np.savetxt(f, tensor_numpy, fmt='%s')
@@ -196,8 +192,6 @@ if __name__ == '__main__':
         train(epoch)
         patience, best_loss=test(patience, best_loss)
         
-        # if epoch % 40 == 0:
-        #     optimizer.param_groups[0]['lr'] = optimizer.param_groups[0]['lr']*0.1
         if patience == 0:
             print('Early stopping...')
             break
