@@ -10,8 +10,8 @@ import os
 
 # Training settings
 use_cuda = torch.cuda.is_available()
-batch_size=512                 # input batch size for training (default: 64)
-test_batch_size=2000	       # input batch size for testing (default: 1000)
+batch_size=512                 
+test_batch_size=2000	       
 epochs=100
 lr=0.01
 seed=1                         # random seed (default: 1)
@@ -44,16 +44,16 @@ class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
         self.infl_ratio = 1
-        self.fc1 = BinarizeLinear(784, 32*self.infl_ratio)
+        self.fc1 = BinarizeLinear(784, 64*self.infl_ratio)
         self.htanh1 = nn.Hardtanh()
-        self.bn1 = nn.BatchNorm1d(32*self.infl_ratio, affine=False)
-        self.fc2 = BinarizeLinear(32*self.infl_ratio, 32*self.infl_ratio)
+        self.bn1 = nn.BatchNorm1d(64*self.infl_ratio, affine=False)
+        self.fc2 = BinarizeLinear(64*self.infl_ratio, 64*self.infl_ratio)
         self.htanh2 = nn.Hardtanh()
-        self.bn2 = nn.BatchNorm1d(32*self.infl_ratio, affine=False)
+        self.bn2 = nn.BatchNorm1d(64*self.infl_ratio, affine=False)
         # self.fc3 = BinarizeLinear(64*self.infl_ratio, 64*self.infl_ratio)
         # self.htanh3 = nn.Hardtanh()
         # self.bn3 = nn.BatchNorm1d(64*self.infl_ratio, affine=False)
-        self.fc3 = nn.Linear(32*self.infl_ratio, 10)
+        self.fc3 = nn.Linear(64*self.infl_ratio, 10)
         self.drop = nn.Dropout(0.4)
 
     def forward(self, x):
@@ -94,13 +94,7 @@ def train(epoch):
 
         optimizer.zero_grad()
         loss.backward()
-        for p in list(model.parameters()):
-            if hasattr(p, 'org'):
-                p.data.copy_(p.org)
         optimizer.step()
-        for p in list(model.parameters()):
-            if hasattr(p, 'org'):
-                p.org.copy_(p.data.clamp_(-1, 1))
 
         if batch_idx % log_interval == 0:
             #  Print Accuracy

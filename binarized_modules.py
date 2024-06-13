@@ -3,15 +3,8 @@ from torch.autograd.function import InplaceFunction
 
 class Binarize(InplaceFunction):
 
-    def forward(ctx, input, allow_scale=False, inplace=False):
-        ctx.inplace = inplace
-        if ctx.inplace:
-            ctx.mark_dirty(input)
-            output = input
-        else:
-            output = input.clone()
-        scale = output.abs().max() if allow_scale else 1
-        return output.div(scale).sign().mul(scale)
+    def forward(ctx, input):
+        return input.sign()
 
     def backward(ctx, grad_output):
         # STE
@@ -34,8 +27,5 @@ class BinarizeLinear(nn.Linear):
             input_b = input
         weight_b = binarized(self.weight)
         out = nn.functional.linear(input_b, weight_b)
-        if not self.bias is None:
-            self.bias.org = self.bias.data.clone()
-            out += self.bias.view(1, -1).expand_as(out)
 
         return out 
